@@ -6,9 +6,8 @@
 //
 
 import Foundation
-import Combine
 
-open class URLQueryItemsEncoder: TopLevelEncoder {
+open class URLQueryItemsEncoder {
     public func encode<T: Encodable>(_ value: T) throws -> [URLQueryItem] {
         return try NodeEncoder().encode(value).toURLQueryItems()
     }
