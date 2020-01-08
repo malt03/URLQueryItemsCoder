@@ -8,12 +8,14 @@
 import Foundation
 
 open class URLQueryItemsEncoder {
+    public init() {}
+    
     public func encode<T: Encodable>(_ value: T) throws -> [URLQueryItem] {
         return try NodeEncoder().encode(value).toURLQueryItems()
     }
 }
 
-public final class Node {
+fileprivate final class Node {
     var dict: [String: Node]?
     var array: [Node]?
     var value: String?
