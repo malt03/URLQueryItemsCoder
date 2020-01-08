@@ -14,54 +14,100 @@ open class URLQueryItemsEncoder: TopLevelEncoder {
     }
 }
 
-public enum Node {
-    case keyed([String: Node])
-    case unkeyed([Node])
-    case single(String)
+public final class Node {
+    var dict: [String: Node]?
+    var array: [Node]?
+    var value: String?
     
-    static var empty: Node { .keyed([:]) }
+    static var empty: Node { Node(dict: nil, array: nil, value: nil, kind: .empty) }
+    static func single(_ value: String) -> Node { Node(dict: nil, array: nil, value: value, kind: .single) }
     
-    func addingChild(key: String, _ value: Node) throws -> Node {
-        switch self {
-        case .keyed(var dict):
-            dict[key] = value
-            return .keyed(dict)
-        default: throw Errors.crossContainer
+    init(dict: [String: Node]?, array: [Node]?, value: String?, kind: Kind) {
+        self.dict = dict
+        self.array = array
+        self.value = value
+        self.kind = kind
+    }
+    
+    private var kind = Kind.empty
+    
+    enum Kind {
+        case keyed
+        case unkeyed
+        case single
+        case empty
+    }
+    
+    func addChild(node: Node, forKey key: String) throws {
+        switch kind {
+        case .empty:
+            kind = .keyed
+            dict = [key: node]
+        case .keyed:
+            dict![key] = node
+        default:
+            throw Errors.crossContainer
         }
     }
     
-    func addingChild(_ value: Node) throws -> Node {
-        switch self {
-        case .unkeyed(var array):
-            array.append(value)
-            return .unkeyed(array)
-        default: throw Errors.crossContainer
+    func addChild(node: Node) throws {
+        switch kind {
+        case .empty:
+            kind = .unkeyed
+            array = [node]
+        case .unkeyed:
+            array!.append(node)
+        default:
+            throw Errors.crossContainer
         }
+    }
+    
+    func setValue(_ value: String) throws {
+        switch kind {
+        case .empty:
+            kind = .single
+            self.value = value
+        case .single:
+            self.value = value
+        default:
+            throw Errors.crossContainer
+        }
+    }
+    
+    func forceCopy(_ target: Node) {
+        self.dict = target.dict
+        self.array = target.array
+        self.value = target.value
+        self.kind = target.kind
     }
     
     func toURLQueryItems() throws -> [URLQueryItem] {
-        switch self {
-        case .keyed(let dict):
-            return dict.flatMap { $1.toKeyValues(parentKey: $0).map { URLQueryItem(name: $0, value: $1) } }
+        switch kind {
+        case .keyed:
+            return dict!.flatMap { $1.toKeyValues(parentKey: $0).map { URLQueryItem(name: $0, value: $1) } }
+        case .empty:
+            return []
         default:
             throw Errors.unsupported
         }
     }
     
     private func toKeyValues(parentKey: String) -> [String: String] {
-        switch self {
-        case .keyed(let dict):
-            return dict.reduce([String: String]()) { (result, args) -> [String: String] in
+        switch kind {
+        case .keyed:
+            return dict!.reduce([String: String]()) { (result, args) -> [String: String] in
                 let (i, node) = args
                 return result.merging(node.toKeyValues(parentKey: "\(parentKey)[\(i)]"), uniquingKeysWith: { $1 })
             }
-        case .unkeyed(let array):
-            return array.enumerated().reduce([String: String]()) { (result, args) -> [String: String] in
+        case .unkeyed:
+            return array!.enumerated().reduce([String: String]()) { (result, args) -> [String: String] in
                 let (i, node) = args
                 return result.merging(node.toKeyValues(parentKey: "\(parentKey)[\(i)]"), uniquingKeysWith: { $1 })
             }
-        case .single(let value):
-            return [parentKey: value]
+        case .single:
+            return [parentKey: value!]
+        case .empty:
+            return [:]
         }
     }
 }
@@ -71,47 +117,45 @@ fileprivate class NodeEncoder: Encoder {
 
     var userInfo: [CodingUserInfoKey : Any] { [:] }
 
-    private var node: Node?
+    private var node = Node.empty
 
     fileprivate init(codingPath: [CodingKey] = []) {
         self.codingPath = codingPath
     }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
-        KeyedEncodingContainer(KeyedContainer(encoder: self, codingPath: codingPath))
+        KeyedEncodingContainer(KeyedContainer(targetNode: node, encoder: self, codingPath: codingPath))
     }
 
     func unkeyedContainer() -> UnkeyedEncodingContainer {
-        UnkeyedContainer(encoder: self, codingPath: codingPath)
+        UnkeyedContainer(targetNode: node, encoder: self, codingPath: codingPath)
     }
 
     func singleValueContainer() -> SingleValueEncodingContainer {
-        SingleValueContainer(encoder: self, codingPath: codingPath)
+        SingleValueContainer(targetNode: node, encoder: self, codingPath: codingPath)
     }
 
     func encode<T: Encodable>(_ value: T) throws -> Node {
         try value.encode(to: self)
-        return node ?? .empty
+        return node
     }
     
     private class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
         private(set) var codingPath: [CodingKey]
 
         private let encoder: NodeEncoder
+        private let targetNode: Node
 
-        init(encoder: NodeEncoder, codingPath: [CodingKey]) {
+        init(targetNode: Node, encoder: NodeEncoder, codingPath: [CodingKey]) {
+            self.targetNode = targetNode
             self.encoder = encoder
             self.codingPath = codingPath
         }
-
-        private func setNode(_ value: Node, forKey key: Key) throws {
-            if let node = encoder.node {
-                encoder.node = try node.addingChild(key: key.stringValue, value)
-            } else {
-                encoder.node = Node.keyed([key.stringValue: value])
-            }
-        }
         
+        private func setNode(_ node: Node, forKey key: Key) throws {
+            try targetNode.addChild(node: node, forKey: key.stringValue)
+        }
+
         private func setNode<T: CustomStringConvertible>(_ value: T, forKey key: Key) throws {
             try setNode(.single(value.description), forKey: key)
         }
@@ -137,15 +181,15 @@ fileprivate class NodeEncoder: Encoder {
         }
 
         func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> {
-            codingPath.append(key)
-            defer { codingPath.removeLast() }
-            return KeyedEncodingContainer(KeyedContainer<NestedKey>(encoder: encoder, codingPath: codingPath))
+            let nestedNode = Node.empty
+            try! setNode(nestedNode, forKey: key)
+            return KeyedEncodingContainer(KeyedContainer<NestedKey>(targetNode: nestedNode, encoder: encoder, codingPath: codingPath))
         }
 
         func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
-            codingPath.append(key)
-            defer { codingPath.removeLast() }
-            return UnkeyedContainer(encoder: encoder, codingPath: codingPath)
+            let nestedNode = Node.empty
+            try! setNode(nestedNode, forKey: key)
+            return UnkeyedContainer(targetNode: nestedNode, encoder: encoder, codingPath: codingPath)
         }
 
         func superEncoder() -> Encoder { encoder }
@@ -153,32 +197,25 @@ fileprivate class NodeEncoder: Encoder {
     }
 
     private class UnkeyedContainer: UnkeyedEncodingContainer {
-        var count: Int {
-            switch encoder.node ?? .empty {
-            case .unkeyed(let array): return array.count
-            default: return 0
-            }
-        }
+        var count: Int { encoder.node.array?.count ?? 0 }
 
         private(set) var codingPath: [CodingKey]
 
         private let encoder: NodeEncoder
+        private let targetNode: Node
 
-        init(encoder: NodeEncoder, codingPath: [CodingKey]) {
+        init(targetNode: Node, encoder: NodeEncoder, codingPath: [CodingKey]) {
+            self.targetNode = targetNode
             self.encoder = encoder
             self.codingPath = codingPath
         }
 
-        private func setNode(_ value: Node) throws {
-            if let node = encoder.node {
-                encoder.node = try node.addingChild(value)
-            } else {
-                encoder.node = Node.unkeyed([value])
-            }
+        private func setNode(_ node: Node) throws {
+            try targetNode.addChild(node: node)
         }
         
         private func setNode<T: CustomStringConvertible>(_ value: T) throws {
-            try setNode(Node.single(value.description))
+            try setNode(.single(value.description))
         }
 
         func encodeNil() throws {
@@ -203,15 +240,15 @@ fileprivate class NodeEncoder: Encoder {
         }
 
         func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> {
-            codingPath.append(IndexCodingKey(index: count))
-            defer { codingPath.removeLast() }
-            return KeyedEncodingContainer(KeyedContainer<NestedKey>(encoder: encoder, codingPath: codingPath))
+            let nestedNode = Node.empty
+            try! setNode(nestedNode)
+            return KeyedEncodingContainer(KeyedContainer<NestedKey>(targetNode: nestedNode, encoder: encoder, codingPath: codingPath))
         }
 
         func nestedUnkeyedContainer() -> UnkeyedEncodingContainer {
-            codingPath.append(IndexCodingKey(index: count))
-            defer { codingPath.removeLast() }
-            return UnkeyedContainer(encoder: encoder, codingPath: codingPath)
+            let nestedNode = Node.empty
+            try! setNode(nestedNode)
+            return UnkeyedContainer(targetNode: nestedNode, encoder: encoder, codingPath: codingPath)
         }
 
         func superEncoder() -> Encoder { encoder }
@@ -230,22 +267,16 @@ fileprivate class NodeEncoder: Encoder {
         private(set) var codingPath: [CodingKey]
 
         private let encoder: NodeEncoder
-
-        init(encoder: NodeEncoder, codingPath: [CodingKey]) {
+        private let targetNode: Node
+        
+        init(targetNode: Node, encoder: NodeEncoder, codingPath: [CodingKey]) {
+            self.targetNode = targetNode
             self.encoder = encoder
             self.codingPath = codingPath
         }
         
-        private func setNode(_ value: Node) throws {
-            switch encoder.node {
-            case .single, nil:
-                encoder.node = value
-            default: throw Errors.crossContainer
-            }
-        }
-
         private func setNode<T: CustomStringConvertible>(_ value: T) throws {
-            try setNode(.single(value.description))
+            try targetNode.setValue(value.description)
         }
 
         func encodeNil() throws {}
@@ -264,7 +295,7 @@ fileprivate class NodeEncoder: Encoder {
         func encode(_ value: UInt32) throws { try setNode(value) }
         func encode(_ value: UInt64) throws { try setNode(value) }
         func encode<T: Encodable>(_ value: T) throws {
-            try setNode(try NodeEncoder().encode(value))
+            targetNode.forceCopy(try NodeEncoder().encode(value))
         }
     }
 }

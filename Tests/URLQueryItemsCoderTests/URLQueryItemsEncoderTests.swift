@@ -9,40 +9,6 @@ import XCTest
 @testable import URLQueryItemsCoder
 
 class URLQueryItemsEncoderTests: XCTestCase {
-    let node = Node.keyed(
-        [
-            "a": Node.single("v-a"),
-            "b": Node.keyed([
-                "b_a": Node.single("v-b_a"),
-                "b_b": Node.keyed([
-                    "b_b_a": Node.single("v-b_b_a"),
-                ]),
-                "b_c": Node.unkeyed([
-                    Node.single("v-b_c_0")
-                ]),
-            ]),
-            "c": Node.unkeyed([
-                Node.single("v-c_0"),
-                Node.keyed([
-                    "c_1_a": Node.single("v-c_1_a"),
-                ]),
-                Node.unkeyed([
-                    Node.single("v-c_2_0"),
-                ]),
-            ])
-        ]
-    )
-    
-//    let result = [
-//        "a": "v-a",
-//        "b[b_a]": "v-b_a",
-//        "b[b_b][b_b_a]": "v-b_b_a",
-//        "b[b_c][0]": "v-b_c_0",
-//        "c[0]": "v-c_0",
-//        "c[1][c_1_a]": "v-c_1_a",
-//        "c[2][0]": "v-c_2_0",
-//    ]
-    
     struct Property: Encodable {
         let a = 1
         let b = Date()
@@ -74,10 +40,10 @@ class URLQueryItemsEncoderTests: XCTestCase {
     }
     
     func testExample() {
-//        let queryItems = try! URLQueryItemsEncoder().encode(Property())
-//        print(queryItems)
-        let queryItems = try! URLQueryItemsEncoder().encode(Hoge())
+        let queryItems = try! URLQueryItemsEncoder().encode(Property())
         print(queryItems)
+//        let queryItems = try! URLQueryItemsEncoder().encode(Hoge())
+//        print(queryItems)
     }
     
     static var allTests = [
