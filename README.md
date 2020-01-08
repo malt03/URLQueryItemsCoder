@@ -1,8 +1,6 @@
 # URLQueryItemsCoder [![Build Status](https://travis-ci.org/malt03/URLQueryItemsCoder.svg?branch=master)](https://travis-ci.org/malt03/URLQueryItemsCoder) [![SwiftPM compatible](https://img.shields.io/badge/SwiftPM-compatible-4BC51D.svg)](https://github.com/apple/swift-package-manager) ![License](https://img.shields.io/github/license/malt03/URLQueryItemsCoder.svg)
-I used [Kingfisher](https://github.com/onevcat/Kingfisher) as reference. Great thanks to onevcat !
 
-Macduff is a library for downloading, caching and displaying images on SwiftUI.  
-You can create ProgressView or ErrorView, and customize ImageView.  
+URLQueryItemsCoder is a library for encoding an Encodable to [URLQueryItem].  
 
 ## Usage
 
