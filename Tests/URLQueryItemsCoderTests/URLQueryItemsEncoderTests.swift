@@ -11,42 +11,79 @@ import XCTest
 class URLQueryItemsEncoderTests: XCTestCase {
     struct Property: Encodable {
         let a = 1
-        let b = Date()
-        let c = [1, 2]
-        let d = D()
+        let b = [2, 3]
+        let c = C()
 
-        struct D: Encodable {
-            let da = 1
-            let db = [1, 2]
-            let dc = DC()
+        struct C: Encodable {
+            let ca = 4
+            let cb = [5, 6]
+            let cc = CC()
 
-            struct DC: Encodable {
-                let dca = 1
+            struct CC: Encodable {
+                let cca = 7
             }
         }
     }
     
-    struct Hoge: Encodable {
+    struct NestedContainerProperty: Encodable {
         enum Keys: CodingKey {
             case a
             case b
+            case c
         }
         func encode(to encoder: Encoder) throws {
             var root = encoder.container(keyedBy: Keys.self)
-            try root.encode(true, forKey: .a)
+            try root.encode(1, forKey: .a)
             var b = root.nestedContainer(keyedBy: Keys.self, forKey: .b)
-            try b.encode(1, forKey: .b)
+            try b.encode(2, forKey: .a)
+            try b.encode(3, forKey: .b)
+            var c = root.nestedUnkeyedContainer(forKey: .c)
+            try c.encode(4)
+            try c.encode(5)
         }
     }
     
-    func testExample() {
-        let queryItems = try! URLQueryItemsEncoder().encode(Property())
-        print(queryItems)
-//        let queryItems = try! URLQueryItemsEncoder().encode(Hoge())
-//        print(queryItems)
+    func testProperty() {
+        XCTAssertEqual(
+            Set(try! URLQueryItemsEncoder().encode(Property())),
+            Set([
+                URLQueryItem(name: "a", value: "1"),
+                URLQueryItem(name: "b[0]", value: "2"),
+                URLQueryItem(name: "b[1]", value: "3"),
+                URLQueryItem(name: "c[ca]", value: "4"),
+                URLQueryItem(name: "c[cb][0]", value: "5"),
+                URLQueryItem(name: "c[cb][1]", value: "6"),
+                URLQueryItem(name: "c[cc][cca]", value: "7"),
+            ])
+        )
+    }
+    
+    func testNestedContainerProperty() {
+        XCTAssertEqual(
+            Set(try URLQueryItemsEncoder().encode(NestedContainerProperty())),
+            Set([
+                URLQueryItem(name: "a", value: "1"),
+                URLQueryItem(name: "b[a]", value: "2"),
+                URLQueryItem(name: "b[b]", value: "3"),
+                URLQueryItem(name: "c[0]", value: "4"),
+                URLQueryItem(name: "c[1]", value: "5"),
+            ])
+        )
+    }
+    
+    func testEmptyProperty() {
+        XCTAssertEqual(try URLQueryItemsEncoder().encode([String: String]()), [])
+    }
+    
+    func testUnsupported() {
+        XCTAssertThrowsError(try URLQueryItemsEncoder().encode([1]))
+        XCTAssertThrowsError(try URLQueryItemsEncoder().encode(1))
     }
     
     static var allTests = [
-        ("testExample", testExample),
+        ("testProperty", testProperty),
+        ("testNestedContainerProperty", testNestedContainerProperty),
+        ("testEmptyProperty", testEmptyProperty),
+        ("testUnsupported", testUnsupported),
     ]
 }
