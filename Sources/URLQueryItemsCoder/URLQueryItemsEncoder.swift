@@ -16,14 +16,14 @@ open class URLQueryItemsEncoder {
 }
 
 fileprivate final class Node {
-    var dict: [String: Node]?
+    var dict: [(String, Node)]?
     var array: [Node]?
     var value: String?
     
     static var empty: Node { Node(dict: nil, array: nil, value: nil, kind: .empty) }
     static func single(_ value: String) -> Node { Node(dict: nil, array: nil, value: value, kind: .single) }
     
-    init(dict: [String: Node]?, array: [Node]?, value: String?, kind: Kind) {
+    init(dict: [(String, Node)]?, array: [Node]?, value: String?, kind: Kind) {
         self.dict = dict
         self.array = array
         self.value = value
@@ -43,9 +43,9 @@ fileprivate final class Node {
         switch kind {
         case .empty:
             kind = .keyed
-            dict = [key: node]
+            dict = [(key, node)]
         case .keyed:
-            dict![key] = node
+            dict!.append((key, node))
         default:
             throw Errors.crossContainer
         }
@@ -93,22 +93,12 @@ fileprivate final class Node {
         }
     }
     
-    private func toKeyValues(parentKey: String) -> [String: String] {
+    private func toKeyValues(parentKey: String) -> [(String, String)] {
         switch kind {
-        case .keyed:
-            return dict!.reduce([String: String]()) { (result, args) -> [String: String] in
-                let (i, node) = args
-                return result.merging(node.toKeyValues(parentKey: "\(parentKey)[\(i)]"), uniquingKeysWith: { $1 })
-            }
-        case .unkeyed:
-            return array!.enumerated().reduce([String: String]()) { (result, args) -> [String: String] in
-                let (i, node) = args
-                return result.merging(node.toKeyValues(parentKey: "\(parentKey)[\(i)]"), uniquingKeysWith: { $1 })
-            }
-        case .single:
-            return [parentKey: value!]
-        case .empty:
-            return [:]
+        case .keyed:   return dict!.flatMap { $1.toKeyValues(parentKey: "\(parentKey)[\($0)]") }
+        case .unkeyed: return array!.enumerated().flatMap { $1.toKeyValues(parentKey: "\(parentKey)[\($0)]") }
+        case .single:  return [(parentKey, value!)]
+        case .empty:   return []
         }
     }
 }

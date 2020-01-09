@@ -45,8 +45,8 @@ class URLQueryItemsEncoderTests: XCTestCase {
     
     func testProperty() {
         XCTAssertEqual(
-            Set(try! URLQueryItemsEncoder().encode(Property())),
-            Set([
+            try! URLQueryItemsEncoder().encode(Property()),
+            [
                 URLQueryItem(name: "a", value: "1"),
                 URLQueryItem(name: "b[0]", value: "2"),
                 URLQueryItem(name: "b[1]", value: "3"),
@@ -54,20 +54,20 @@ class URLQueryItemsEncoderTests: XCTestCase {
                 URLQueryItem(name: "c[cb][0]", value: "5"),
                 URLQueryItem(name: "c[cb][1]", value: "6"),
                 URLQueryItem(name: "c[cc][cca]", value: "7"),
-            ])
+            ]
         )
     }
     
     func testNestedContainerProperty() {
         XCTAssertEqual(
-            Set(try URLQueryItemsEncoder().encode(NestedContainerProperty())),
-            Set([
+            try URLQueryItemsEncoder().encode(NestedContainerProperty()),
+            [
                 URLQueryItem(name: "a", value: "1"),
                 URLQueryItem(name: "b[a]", value: "2"),
                 URLQueryItem(name: "b[b]", value: "3"),
                 URLQueryItem(name: "c[0]", value: "4"),
                 URLQueryItem(name: "c[1]", value: "5"),
-            ])
+            ]
         )
     }
     
