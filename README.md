@@ -4,6 +4,8 @@ URLQueryItemsCoder is a library for encoding an Encodable to [URLQueryItem].
 
 ## Usage
 
+The query items order is guaranteed.
+
 ```swift
 struct Property: Encodable {
     let a = 1
